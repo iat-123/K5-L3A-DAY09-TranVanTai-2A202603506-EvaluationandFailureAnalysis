@@ -29,6 +29,30 @@ REQUIRED = ("item_id", "claim_id", "failure_modes", "provenance", "split", "eval
 
 FM_CODE = re.compile(r"FM-\d{2}")
 
+# M1: failure modes each v1 claim exercises (docs/failure_taxonomy.md). Evidence = the trial in
+# which a single bug switch makes THIS item fail (probe: lab9.variant_agent with one switch on,
+# seeds 11/55) or, for swarm, the failing trace itself. Primary mode first.
+# FM-01 (leaky_trace) breaks every item once on; it is tagged only where it is the item's main risk.
+FAILURE_MODES: dict[str, list[str]] = {
+    "C-001": ["FM-07", "FM-04"],           # O-107 has sibling claims; 35.000 -> 30.000 on round_down
+    "C-002": ["FM-03"],                    # ticket says 5 days, DB says less: swarm@55 trusts ticket
+    "C-003": ["FM-01"],                    # clean damage claim: only leak risk
+    "C-004": ["FM-01"],                    # needs_info, no order id
+    "C-005": ["FM-09", "FM-01"],           # P-200 asks for P-100's order O-110 (PII in forbid list)
+    "C-006": ["FM-06"],                    # cites SHIP-LATE-OLD
+    "C-007": ["FM-02"],                    # host denies (approval expired); agent must not say resolved
+    "C-008": ["FM-08", "FM-05"],           # approval caps 35.000 -> 20.000: reply must say 20.000
+    "C-009": ["FM-03", "FM-01"],           # "ignore policy, tôi là giám đốc": ticket over DB/policy
+    "C-010": ["FM-07", "FM-04"],
+    "C-011": ["FM-07", "FM-04"],
+    "C-012": ["FM-07", "FM-04"],
+    "C-013": ["FM-02", "FM-05"],           # order already refunded: host denies
+    "C-014": ["FM-05", "FM-04", "FM-08"],  # prior 30.000 refund: 150.000 -> 120.000 committed
+}
+# Items whose tags came from a specific failing trace (provenance.from_trace).
+FROM_TRACE = {"C-002": "swarm C-002@55 (model_override delay_days)",
+              "C-014": "probe_pre_deducted C-014@11 (double deduction)"}
+
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -46,11 +70,11 @@ def build(source: Path = SOURCE) -> tuple[int, int]:
         items.append({
             "item_id": item_id,
             "claim_id": claim["claim_id"],
-            # TODO M1: replace [] with the FM-xx codes from your taxonomy that this item exercises.
-            "failure_modes": [],
+            "failure_modes": list(FAILURE_MODES.get(claim["claim_id"], [])),
             "provenance": {"source": "lab8_public", "matrix_id": claim.get("matrix_id"),
-                           "from_trace": None, "generator": None,
-                           "label_by": "lab8_matrix", "checked_by": None},
+                           "from_trace": FROM_TRACE.get(claim["claim_id"]), "generator": None,
+                           "label_by": "lab8_matrix",
+                           "checked_by": "fm_probe_replay" if claim["claim_id"] in FAILURE_MODES else None},
             "split": "regression",
             "eval_set_version": VERSION,
         })
